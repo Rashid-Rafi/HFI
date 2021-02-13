@@ -1,0 +1,334 @@
+---
+title: "Projet ADD : Rashid Rafi, Arakchou Ayour"
+subtitle: "M1 IM"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(dev = 'pdf')
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+```
+
+## Présentation
+
+Le Human Freedom Index (HFI) représente une echelle de 0 à 10 visant à mesurer la liberté humaine parmi les pays du monde entier. Ces mesures prennent en compte plusieurs aspect de la liberté : liberté personnelle, civile, économique. 
+Cet index représente une mesure de la liberté humaine, dans le sens d'abscence de contrainte coercitive.
+Le HFI 2019 est la 5ème édition (le premier étant de 2015), et comporte 76 indicateurs distincts de la liberté personnelle
+et économique dans les domaines suivants : 
+
+- Rule of Law
+
+- Security and Safety
+
+- Movement
+
+- Religion
+
+- Association, Assembly, and Civil Society
+
+- Expression and Information
+
+- Identity and Relationships
+
+- Size of Government
+
+- Legal System and Property Rights
+
+- Access to Sound Money
+
+- Freedom to Trade Internationally
+
+- Regulation of Credit, Labor, and Business
+
+## But, Objectifs
+Un des objectifs du HFI est de visualiser la liberté humaine de manière générale dans le monde, suivant les différents pays. Un autre serait de comprendre ce qu'est la liberté humaine, mieux la définir, et regarder sa relation avec les autres phénomènes économiques et sociales. Finalement, es-ce le HFI est un bon index ? On pourrait au final faire un résumé avec un classement, puis essayer d'expliquer ce classement.
+
+
+## Import du dataset et selection de nos variables
+```{r, message=FALSE, warning=FALSE}
+data <- read_csv("hfi_cc_2018.csv")
+head(data)
+```
+
+Notre jeu de donnée n'est pas très bien présenté : nous avons tous les pays en 2016, puis ces mêmes pays en 2015, etc. Puisque l'unité expérimentale ici est un pays sur une année précise, on veut réarranger notre jeu de facon à avoir tous les pays en ordre alphabétique, pour une meilleur visibilité.
+```{r, , message=FALSE, warning=FALSE}
+data2 <- data[order(data$countries),]
+head(data2)
+```
+
+Précisons la signification de nos variables : les préfixes __pf__ pour Personal Freedom, __ef__ pour Economic Freedom, et __hf__ pour Fuman Freedom.
+
+Nous avons beaucoup de variables (123 variables), nous avons pensé à faire un pivot_longer sur nos variables pf_, ef_, et hf_ mais nous remarquons quelque chose : les variables pf_() sont des moyennes des variables pf_()_(). Regardons cela de plus près :
+```{r, message=FALSE, warning=FALSE}
+new <- data2 %>%
+  mutate(test = (pf_rol_procedural + pf_rol_civil + pf_rol_criminal)/3)
+head(new$test) 
+head(data2$pf_rol)
+```
+
+Nous avons bien (à quelques arrondis près) la même colonne pf_rol si on moyenne 3 sous-catégories de Rule Of Law.
+Nous décidons alors de travailler uniquement sur ces moyennes, donc sur ces variables qui décrivent les domaines cités plus haut. Réarrangeons notre dataset  :
+
+```{r}
+data3 <- data2 %>%
+  select(countries,
+         region,
+         year, 
+         pf_rol, 
+         pf_ss, 
+         pf_movement, 
+         pf_religion, 
+         pf_association, 
+         pf_expression, 
+         pf_identity, 
+         pf_score, 
+         pf_rank,
+         ef_government,
+         ef_legal,
+         ef_money,
+         ef_trade,
+         ef_regulation,
+         ef_score,
+         ef_rank,
+         hf_score,
+         hf_rank
+         )
+```
+
+Nous avons ici enlevé l'ISOCode puisqu'il n'est pas utile à garder, mais nous gardons la variable __région__ pour ensuite faire une étude qualitative en fonction des régions du monde.
+
+## Personal Freedom vs Economic Freedom
+
+La première chose que l'on constate est que le jeu de donnée est regroupé en 2 aspect de la liberté : la liberté personelle et économique. Comparons alors ces 2 libertés.
+
+```{r, message=FALSE, warning=FALSE}
+library(ggpmisc) 
+
+ggplot(data = data3, mapping = aes(x = pf_score, y = ef_score)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  stat_poly_eq(formula = y ~ x, 
+               aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), 
+               parse = TRUE) +
+  labs(x = "Personal Freedom",
+       y = "Economic Freedom",
+       title = "Personal Freedom en fonction de Economic Freedom") +
+  theme_bw() #theme black and white
+
+```
+
+On observe que la grande majorité des pays sont concentrés à droite du nuage de points, ce qui signifie qu'il s'agit de pays pour lesquels l'indice de liberté humain atteint un score élevé. De plus, on constate qu'il y a peu de pays avec un indice humain très bas, malgré tout de même la présence de quelques observations.
+
+Nous avons également appliquer un modèle de régression linéaire grâce à l'argument __method__ de la fonction __geom_smooth__. De cela, on a extrait l'équation de la droite et le R-squarred grâce à la fonction __stat_poly_eq__ et la librarie __ggpmisc__, qui est une mesure statistique qui indique si le modèle est proche des données et le décrit bien. Après documentation, nous comprenons que le R-squarred est un pourcentage de la variabilité décrit par le modèle linéaire.
+
+R-squared = Variance expliquée / Variance totale
+
+0% indique que le modèle explique 0% de la variabilité des données autour de sa moyenne.
+100% indique que le modèle explique toute la variabilité des données autour de sa moyenne.
+
+En général, plus le R-squarred est grand, mieux le modèle décrit les données. Ici, nous avons un R-squarred de 40%, donc 40% de la variance totale est expliqué par un modèle de régression linéaire, ce qui n'est pas très élévé. Un modèle linéaire ne convient pas.
+
+Essayons maintenant de regarder cela par rapport aux différentes régions du monde.
+
+```{r, message=FALSE, warning=FALSE}
+ggplot(data = data3, mapping = aes(x = pf_score, y = ef_score)) + 
+  geom_point(mapping = aes(color = region), alpha = 0.6) +
+  geom_smooth(se = FALSE) +
+  labs(x = "Personal Freedom",
+       y = "Economic Freedom",
+       title = "Personal Freedom en fonction de Economic Freedom") +
+  theme_bw()
+
+```
+
+Les régions __Sub-Saharan Africa__, __Latin America & the Caribbean__ et __Middle East & North Africa__ sont celles qui comptent les pays avec les plus faibles scores de liberté personnelles et économiques. A l'inverse, ce sont les régions __Western Europe__ et __Eastern Europe__, ainsi que __North America__ qui compte les pays avec le plus haut score. On peut mettre ici en évidence un lien avec le niveau de développement des régions : les pays les plus développés ont un score très élevé (les pays du Nord) tandis que les pays sous-developpés ont un score très bas (pays en developpement, pays sous-developpé, PMA).
+
+Essayons d'utiliser un facet_wrap pour une autre visualisation.
+
+```{r, message=FALSE, warning=FALSE}
+ggplot(data = data3, mapping = aes(x = pf_score, y = ef_score)) + 
+  geom_point(alpha = 0.6) +
+  facet_wrap(~ region, nrow = 2) +
+  labs(x = "Personal Freedom",
+       y = "Economic Freedom",
+       title = "Personal Freedom en fonction de Economic Freedom") +
+  theme_bw()
+```
+
+Ce graphique nous permet d'avoir une vison plus globale de l'indice humain en fonction de chaque région. Il peut être interessant d'étudier les régions __Western Europe__ et __Sub-Saharian Africa__ et de dresser un classement des pays selon l'indice de liberté humain. Nous utilisons des requêtes SQL.
+
+
+```{r, message=FALSE, warning=FALSE}
+library(sqldf)
+# Western Europe
+we = sqldf( "SELECT countries, hf_score
+            FROM data3
+            WHERE region = 'Western Europe' AND year = 2016") ; 
+we2 = as_tibble(we)
+we_croissant <- arrange(we2, hf_score); we_croissant
+we_decroissant <- arrange(we2, desc(hf_score)); we_decroissant
+
+# Sub-Saharian Africa
+af = sqldf( "SELECT countries, hf_score
+            FROM data3
+            WHERE region = 'Sub-Saharan Africa' AND year = 2016 ") ; 
+af2 = as_tibble(af)
+af_croissant <- arrange(af2, hf_score); af_croissant
+af_decroissant <- arrange(af2, desc(hf_score)); af_decroissant
+```
+
+On construit un classement croissant et décroissant pour les deux régions afin d'observer quels sont les pays avec l'indice humain de liberté le plus elevé et le plus faible. De plus nous pouvons egalement construire une fonction de répartition qui nous permet de constater l'écart important entre les deux regions. 
+
+
+```{r, message=FALSE, warning=FALSE}
+data_we_af <- filter(data3, region == c('Western Europe','Sub-Saharan Africa'), year == 2016)
+ggplot(data_we_af, aes(hf_score, colour = region)) + 
+  stat_ecdf() +
+  labs(title = 'Fonction de repartition de Human Freedom score') +
+  theme_bw()
+```
+
+Pour la region africaine, près de 50% des pays ont un score humain inferieur à 6.5 alors qu'à l'inverse, dans la region Western Europe, 50% des pays ont un score inferieur à 8.5 approximativement.
+
+
+Un bon outil pour comparer les differentes regions est le boxplot.
+
+```{r, message=FALSE, warning=FALSE}
+ggplot(data = data3, mapping = aes(x = region, y = hf_score)) +
+  geom_boxplot() +
+  labs(y = "Human Freedom") +
+  coord_flip() +
+  theme_bw()
+```
+
+coord_flip() est utilisé pour avoir une meilleure visibilité sur les noms des régions. Nous avons egalement la possibilite de recoder les differentes modalites de la variable region de la manière suivante :
+
+
+```{r, message=FALSE, warning=FALSE}
+library(forcats) # afin de pouvoir utiliser la fonction fct_recode
+
+class(data3$region) # il faut verifier qu'il s'agit bien d'une variable qualitative
+
+data_recode <- data3 # On crée une copie de notre jeu de donnees initiale afin de garder une sauvegarde et d'appliquer le recodage sur une copie.
+
+data_recode$region <- fct_recode(data_recode$region,
+                            "Cau & CA" = "Caucasus & Central Asia",
+                            "EA" = "East Asia",
+                            "EUE" = "Eastern Europe" ,
+                            "LA & Car"  ="Latin America & the Caribbean" ,
+                            "ME & N" = "Middle East & North Africa" ,
+                            "NA" = "North America" ,
+                            "OCE" = "Oceania" ,
+                            "SA" = "South Asia" ,
+                            "SS Africa" = "Sub-Saharan Africa" ,
+                            "EUW" = "Western Europe" )
+```
+
+Comme dit précedemment, le boxplot est un bon moyen de comparer les regions.
+
+```{r, message=FALSE, warning=FALSE}
+ggplot(data_recode) + 
+  geom_boxplot(aes(x = region, y = hf_score)) + 
+  geom_point(aes(x = region, y = hf_score), col = "red", alpha = 0.2) +
+  theme_bw()
+```
+
+__North America__ et __Western Europe__ sont les deux regions ayant les meilleurs resultats en terme de score de liberté humaine avec une forte concentration autour de la médiane.
+
+## Corrélation
+
+Etudions la corrélation de nos variables. Nous ne voulons pas utiliser une heatmap classique car nous ne trouvons pas ça très beau à voir (et parfois difficile à comprendre) donc nous avons opté pour un corrélogramme, en gardant les coefficients de corrélations.
+
+```{r, eval = FALSE}
+#install.packages("corrplot")
+library(corrplot)
+
+donnee <- select(data3, -c(countries, region)) #on enlève les variables quali
+b <- na.omit(donnee) #on enlève les NA
+p <- round(cor(b), 2) #on arrondi les corrélations à 2 chiffres après la virgule
+
+corrplot(p, 
+         method = "number", 
+         type = "upper", 
+         order = "hclust", 
+         tl.col = "black", 
+         tl.srt = 45,
+         title = "Corrélogramme")
+```
+
+Nous avons un petit soucis de rendu, l'image est compressé et les coefficients ne sont pas lisibles. Lorsque nous plottons dans R, il faut zoomer pour mieux voir le corrélogramme (avec le bouton "zoom" sur R) mais cet image zoomé n'est pas accessible directement. Nous avons essayé de changer les attributs fig.width ou encore out.width mais cela ne résout pas le problème. La seule solution est donc d'enregistrer cette image zoomé puis de l'importer via R.
+
+
+
+```{r, out.width="100%"}
+knitr::include_graphics("test.png")
+```
+
+On peut changer l'argument "method" pour visualiser en cercle, en carré, etc.
+
+Les corrélations positives sont affichées en bleu et les corrélations négatives en rouge.  L’intensité de la couleur est proportionnelle aux coefficients de corrélation.
+
+On observe plusieurs choses :
+
+- La taille du gouvernement (ef_government) n'impacte pas la liberté (corrélation très faible),
+ 
+- La religion (pf_religion) n'affecte pas la liberté, contrairement à l'opinion publique.
+
+- Rule of Law a beaucoup d'impact sur la liberté economique et la liberté humaine.
+
+- Corrélation plus élevé de ef_trade (international trade) que ef_money (access to money) sur ef_score (liberté économique)
+
+## Classement
+
+Essayons de regarder le classement des 10 pays les "plus libres" et les "moins libres", et regardons le nombre d'occurence de ces derniers suivant les années. On décide de faire des barplot.
+
+```{r}
+top10 <- filter(data3, hf_rank <= 10)
+last10 <- filter(data3, hf_rank >=152) #il y a 162 pays
+
+#top10
+ggplot(data = top10, mapping = aes(x = countries)) +
+  geom_bar() +
+  coord_flip() +
+  theme_bw()
+
+#last10
+ggplot(data = last10, mapping = aes(x = countries)) +
+  geom_bar() +
+  coord_flip() +
+  theme_bw()
+```
+
+Pour faire un barplot et remplir par année, nous devons d'abord transformer la variable year en string, pour catégoriser cette variable.
+
+```{r}
+z <- data3
+z$year <- as.character(z$year)
+
+newtop10 <- filter(z, hf_rank <= 10)
+newlast10 <- filter(z, hf_rank >=152)
+
+ggplot(data = newtop10, mapping = aes(x = countries, fill = year)) +
+  geom_bar() +
+  coord_flip() +
+  theme_bw()
+
+ggplot(data = newlast10, mapping = aes(x = countries, fill = year)) +
+  geom_bar() +
+  coord_flip() +
+  theme_bw()
+```
+
+Ce graphique nous permet d'observer combien de fois les pays membres du last 10 sont apparu dans ce classement et également en quelle année ils sont apparus pour la premiere fois. Le premier graphique nous permet de voir que le Royaume-Uni, la Suisse, Norvege, Nouvelle-Zelande, l'Irelande, Hong Kong, Finlande, Danemark, Canada, et Australie sont les pays qui étaient présents dans tous les top 10 annuelle depuis 2008. 
+
+Ce classement va dans le sens des pays développés ayant un grand score, étant constamment dans le top 10 contrairement aux pays sous-développés. Certains pays comme la Sirye ou le Yemen qui ont une situation économique et politique compliquée se retrouvent constamment dans le last 10. 
+
+## Conclusion
+
+Nous pouvons affimer par notre étude que le développement du pays est fortement lié à la liberté humaine. La situation politique, économique et sociale d'un pays influe sur la valeur de cet index faisant de lui un indicateur pertinent. 
+En effet, il prend en compte les différents aspects de la liberté et on retrouve bien les pays que l'on attend en haut du classement. Un individu vivant dans un pays très développé s'attend à être plus libre (économiquement et personnellement) que dans un pays sous-developpé, pauvre, en guerre, etc.
